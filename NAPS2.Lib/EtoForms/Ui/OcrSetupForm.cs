@@ -5,12 +5,15 @@ using NAPS2.EtoForms.Layout;
 using NAPS2.EtoForms.Widgets;
 using NAPS2.Lang;
 using NAPS2.Ocr;
+using NAPS2.Scan;
 
 namespace NAPS2.EtoForms.Ui;
 
 public class OcrSetupForm : EtoDialogBase
 {
     private readonly TesseractLanguageManager _tesseractLanguageManager;
+    private readonly ScanningContext _scanningContext;
+    private readonly OcrEngineFactory _ocrEngineFactory;
 
     private readonly CheckBox _enableOcr = C.CheckBox(UiStrings.MakePdfsSearchable);
     private readonly DropDown _engineType = C.DropDown();
@@ -34,12 +37,15 @@ public class OcrSetupForm : EtoDialogBase
     private bool _suppressLangChangeEvent;
 
     public OcrSetupForm(Naps2Config config, TesseractLanguageManager tesseractLanguageManager,
+        ScanningContext scanningContext, OcrEngineFactory ocrEngineFactory,
         IIconProvider iconProvider) : base(config)
     {
         Title = UiStrings.OcrSetupFormTitle;
         IconName = "text_small";
 
         _tesseractLanguageManager = tesseractLanguageManager;
+        _scanningContext = scanningContext;
+        _ocrEngineFactory = ocrEngineFactory;
 
         _engineType.Items.Add(new ListItem { Key = "Tesseract", Text = "Tesseract" });
         _engineType.Items.Add(new ListItem { Key = "RapidOCR", Text = "RapidOCR (PaddleOCR)" });
@@ -245,6 +251,9 @@ public class OcrSetupForm : EtoDialogBase
     {
         if (!Config.AppLocked.Has(c => c.EnableOcr))
         {
+            var previousEngineType = Config.Get(c => c.OcrEngineType);
+            var previousGpuBackend = Config.Get(c => c.RapidOcrGpuBackend);
+
             var transact = Config.User.BeginTransaction();
             transact.Set(c => c.EnableOcr, _enableOcr.IsChecked());
             transact.Set(c => c.OcrEngineType, _engineType.SelectedKey ?? "Tesseract");
@@ -258,6 +267,15 @@ public class OcrSetupForm : EtoDialogBase
             transact.Set(c => c.OcrPreProcessing, _ocrPreProcessing.IsChecked());
             transact.Set(c => c.OcrAfterScanning, _ocrAfterScanning.IsChecked());
             transact.Commit();
+
+            var newEngineType = _engineType.SelectedKey ?? "Tesseract";
+            var newGpuBackend = _gpuBackend.SelectedKey ?? "auto";
+            if (newEngineType != previousEngineType || newGpuBackend != previousGpuBackend)
+            {
+                var oldEngine = _scanningContext.OcrEngine;
+                _scanningContext.OcrEngine = _ocrEngineFactory.Create();
+                (oldEngine as IDisposable)?.Dispose();
+            }
         }
     }
 }

@@ -116,42 +116,7 @@ public class CommonModule : Module
                 : Environment.ExpandEnvironmentVariables(customComponentsPath);
             return new TesseractLanguageManager(componentsPath);
         }).SingleInstance();
-        builder.Register<IOcrEngine>(ctx =>
-        {
-            var config = ctx.Resolve<Naps2Config>();
-            var engineType = config.Get(c => c.OcrEngineType);
-            var errorOutput = ctx.Resolve<ErrorOutput>();
-
-            if (engineType == "External")
-            {
-                var path = config.Get(c => c.OcrEnginePath);
-                if (string.IsNullOrWhiteSpace(path))
-                {
-                    throw new InvalidOperationException(
-                        "OcrEngineType is 'External' but OcrEnginePath is not set.");
-                }
-                var extEngine = new ExternalOcrEngine(path, config.Get(c => c.OcrEngineArgs));
-                extEngine.OcrError += (_, args) => errorOutput.DisplayError(SdkResources.OcrError, args.Exception);
-                extEngine.OcrTimeout += (_, _) => errorOutput.DisplayError(SdkResources.OcrTimeout);
-                return extEngine;
-            }
-
-            if (engineType == "RapidOCR")
-            {
-                var modelPath = config.Get(c => c.RapidOcrModelPath);
-                var gpuBackend = config.Get(c => c.RapidOcrGpuBackend);
-                var rapidEngine = new RapidOcrEngine(
-                    string.IsNullOrWhiteSpace(modelPath) ? null : modelPath,
-                    string.IsNullOrWhiteSpace(gpuBackend) ? "auto" : gpuBackend);
-                rapidEngine.OcrError += (_, args) => errorOutput.DisplayError(SdkResources.OcrError, args.Exception);
-                rapidEngine.OcrTimeout += (_, _) => errorOutput.DisplayError(SdkResources.OcrTimeout);
-                return rapidEngine;
-            }
-
-            var tessEngine = TesseractOcrEngine.BundledWithModes(ctx.Resolve<TesseractLanguageManager>().TessdataBasePath);
-            tessEngine.OcrError += (_, args) => errorOutput.DisplayError(SdkResources.OcrError, args.Exception);
-            tessEngine.OcrTimeout += (_, _) => errorOutput.DisplayError(SdkResources.OcrTimeout);
-            return tessEngine;
-        }).SingleInstance();
+        builder.RegisterType<OcrEngineFactory>().AsSelf().SingleInstance();
+        builder.Register<IOcrEngine>(ctx => ctx.Resolve<OcrEngineFactory>().Create()).SingleInstance();
     }
 }
