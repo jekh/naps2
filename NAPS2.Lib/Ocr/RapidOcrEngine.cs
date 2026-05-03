@@ -102,6 +102,12 @@ public class RapidOcrEngine : IOcrEngine, IDisposable
         var sessionOptions = new SessionOptions();
         sessionOptions.GraphOptimizationLevel = GraphOptimizationLevel.ORT_ENABLE_EXTENDED;
 
+        bool isWsl = IsWsl();
+        if (isWsl)
+        {
+            logger?.LogDebug("WSL2 environment detected");
+        }
+
         string[] available;
         try
         {
@@ -146,15 +152,15 @@ public class RapidOcrEngine : IOcrEngine, IDisposable
                     break;
                 case "cuda":
                     sessionOptions.AppendExecutionProvider_CUDA(0);
-                    logger?.LogInformation("RapidOCR using CUDA GPU acceleration");
+                    logger?.LogInformation("RapidOCR using CUDA GPU acceleration{WslNote}",
+                        isWsl ? " (WSL2)" : "");
                     break;
                 case "rocm":
                     sessionOptions.AppendExecutionProvider_ROCm(0);
                     logger?.LogInformation("RapidOCR using ROCm GPU acceleration");
                     break;
                 case "openvino":
-                    sessionOptions.AppendExecutionProvider_OpenVINO("GPU");
-                    logger?.LogInformation("RapidOCR using OpenVINO GPU acceleration");
+                    AppendOpenVino(sessionOptions, logger, isWsl);
                     break;
                 default:
                     logger?.LogInformation("RapidOCR using CPU execution provider");
@@ -168,6 +174,46 @@ public class RapidOcrEngine : IOcrEngine, IDisposable
 
         sessionOptions.AppendExecutionProvider_CPU();
         return sessionOptions;
+    }
+
+    private static void AppendOpenVino(SessionOptions sessionOptions, ILogger? logger, bool isWsl)
+    {
+        try
+        {
+            sessionOptions.AppendExecutionProvider_OpenVINO("GPU");
+            logger?.LogInformation("RapidOCR using OpenVINO GPU acceleration{WslNote}",
+                isWsl ? " (WSL2 — GPU support may be limited)" : "");
+            return;
+        }
+        catch (Exception e)
+        {
+            logger?.LogDebug(e, "OpenVINO GPU device not available, trying CPU device");
+        }
+
+        try
+        {
+            sessionOptions.AppendExecutionProvider_OpenVINO("CPU");
+            logger?.LogInformation("RapidOCR using OpenVINO CPU acceleration (optimized for Intel)");
+        }
+        catch (Exception e)
+        {
+            logger?.LogWarning(e, "OpenVINO not available, falling back to default CPU");
+        }
+    }
+
+    private static bool IsWsl()
+    {
+        try
+        {
+            if (!OperatingSystem.IsLinux()) return false;
+            var version = File.ReadAllText("/proc/version");
+            return version.Contains("microsoft", StringComparison.OrdinalIgnoreCase) ||
+                   version.Contains("WSL", StringComparison.Ordinal);
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     private void EnsureInitialized(ILogger logger)

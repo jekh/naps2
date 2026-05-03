@@ -1,4 +1,4 @@
-name: Windows Build
+name: Build
 
 on:
   workflow_dispatch:
@@ -13,7 +13,7 @@ on:
         default: true
 
 jobs:
-  test:
+  test-windows:
     runs-on: windows-2022
     if: ${{ inputs.run_tests }}
     timeout-minutes: 15
@@ -30,9 +30,43 @@ jobs:
       - name: Run WPF image tests
         run: dotnet run --project NAPS2.Tools -- test -v --nogui --images wpf --scope sdk
 
+  test-linux:
+    runs-on: ubuntu-24.04
+    if: ${{ inputs.run_tests }}
+    timeout-minutes: 15
+    steps:
+      - name: Install OS dependencies
+        run: sudo apt-get install -y fonts-liberation2 fonts-noto-core fonts-noto-cjk
+      - uses: actions/checkout@v4
+      - name: Setup .NET 9
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 9.0.x
+      - name: Build debug
+        run: dotnet run --project NAPS2.Tools -- build debug -v
+      - name: Run tests
+        run: dotnet run --project NAPS2.Tools -- test -v --nogui
+
+  test-mac:
+    runs-on: macos-15
+    if: ${{ inputs.run_tests }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup .NET 9
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 9.0.x
+      - name: Install workloads
+        run: dotnet workload install macos --version 9.0.302
+      - name: Build debug
+        run: dotnet run --project NAPS2.Tools -- build debug -v
+      - name: Run tests
+        run: dotnet run --project NAPS2.Tools -- test -v --nogui --nonetwork
+
   package-exe:
     runs-on: windows-2022
-    needs: [test]
+    needs: [test-windows]
     if: ${{ always() && !failure() && !cancelled() }}
     timeout-minutes: 5
     steps:
@@ -54,7 +88,7 @@ jobs:
 
   package-zip:
     runs-on: windows-2022
-    needs: [test]
+    needs: [test-windows]
     if: ${{ always() && !failure() && !cancelled() }}
     timeout-minutes: 5
     steps:
@@ -80,35 +114,35 @@ jobs:
             Write-Host "`n--- $TestName ---"
             $proc = Start-Process -FilePath $ExePath -WorkingDirectory $WorkingDir -PassThru
             Start-Sleep -Seconds 5
-            
+
             try { $proc.Refresh() } catch { }
-            
+
             if ($proc.HasExited) {
               Write-Error "NAPS2.exe exited during $TestName"
               exit 1
             }
             Write-Host "$TestName passed - process still running"
-            
+
             # Clean up
             Get-Process -Name "NAPS2" -ErrorAction SilentlyContinue | Stop-Process -Force
             Get-Process -Name "NAPS2.Worker" -ErrorAction SilentlyContinue | Stop-Process -Force
             Start-Sleep -Seconds 1
           }
-          
+
           $zipPath = Get-ChildItem -Path "NAPS2.Setup/publish" -Recurse -Filter "*.zip" | Select-Object -First 1
           if (-not $zipPath) {
             Write-Error "No ZIP file found in NAPS2.Setup/publish"
             exit 1
           }
           Write-Host "Found ZIP: $($zipPath.FullName)"
-          
+
           $extractPath = Join-Path $env:TEMP "naps2-smoke-test-$(Get-Random)"
           Write-Host "Extracting to: $extractPath"
           Expand-Archive -Path $zipPath.FullName -DestinationPath $extractPath -Force
-          
+
           $portableExe = Join-Path $extractPath "NAPS2.Portable.exe"
           $appExe = Join-Path $extractPath "App/NAPS2.exe"
-          
+
           if (-not (Test-Path $portableExe)) {
             Write-Error "NAPS2.Portable.exe not found in ZIP"
             exit 1
@@ -117,42 +151,110 @@ jobs:
             Write-Error "App/NAPS2.exe not found in ZIP"
             exit 1
           }
-          
+
           # Test 1: Portable launcher - verify it exits with code 0
           # Note: Do NOT use -Wait because NAPS2.Portable.exe spawns NAPS2.exe as a child,
           # and -Wait waits for ALL child processes to exit, causing an indefinite hang
           Write-Host "`n--- Portable Launcher ---"
           $launcher = Start-Process -FilePath $portableExe -WorkingDirectory $extractPath -PassThru
           Start-Sleep -Seconds 3
-          
+
           if (-not $launcher.HasExited) {
             # Launcher should have exited quickly after spawning NAPS2.exe
             Write-Error "NAPS2.Portable.exe did not exit within 3 seconds"
             Stop-Process -Id $launcher.Id -Force -ErrorAction SilentlyContinue
             exit 1
           }
-          
+
           if ($launcher.ExitCode -ne 0) {
             Write-Error "NAPS2.Portable.exe exited with code $($launcher.ExitCode)"
             exit 1
           }
           Write-Host "Portable Launcher passed - exited with code 0"
-          
+
           # Clean up any spawned NAPS2 processes from the launcher test
           Get-Process -Name "NAPS2" -ErrorAction SilentlyContinue | Stop-Process -Force
           Get-Process -Name "NAPS2.Worker" -ErrorAction SilentlyContinue | Stop-Process -Force
           Start-Sleep -Seconds 1
-          
+
           # Test 2: Direct binary execution
           Test-Naps2Process -ExePath $appExe -WorkingDir (Join-Path $extractPath "App") -TestName "Direct Binary"
-          
+
           Write-Host "`nCleaning up..."
           Remove-Item -Path $extractPath -Recurse -Force
-          
+
           Write-Host "`nAll smoke tests passed!"
       - name: Upload ZIP artifact
         uses: actions/upload-artifact@v4
         with:
           name: naps2-win-x64-zip
           path: NAPS2.Setup/publish/**/*.zip
+          if-no-files-found: error
+
+  package-deb:
+    runs-on: ubuntu-24.04
+    needs: [test-linux]
+    if: ${{ always() && !failure() && !cancelled() }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup .NET 9
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 9.0.x
+      - name: Ensure setup obj directory exists
+        run: mkdir -p NAPS2.Setup/obj
+      - name: Build DEB package
+        run: dotnet run --project NAPS2.Tools -- pkg deb -p linux --nosign
+      - name: Upload DEB artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: naps2-linux-x64-deb
+          path: NAPS2.Setup/publish/**/*.deb
+          if-no-files-found: error
+
+  package-rpm:
+    runs-on: ubuntu-24.04
+    needs: [test-linux]
+    if: ${{ always() && !failure() && !cancelled() }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup .NET 9
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 9.0.x
+      - name: Ensure setup obj directory exists
+        run: mkdir -p NAPS2.Setup/obj
+      - name: Build RPM package
+        run: dotnet run --project NAPS2.Tools -- pkg rpm -p linux --nosign
+      - name: Upload RPM artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: naps2-linux-x64-rpm
+          path: NAPS2.Setup/publish/**/*.rpm
+          if-no-files-found: error
+
+  package-mac:
+    runs-on: macos-15
+    needs: [test-mac]
+    if: ${{ always() && !failure() && !cancelled() }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup .NET 9
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 9.0.x
+      - name: Install workloads
+        run: dotnet workload install macos --version 9.0.302
+      - name: Ensure setup obj directory exists
+        run: mkdir -p NAPS2.Setup/obj
+      - name: Build macOS package
+        run: dotnet run --project NAPS2.Tools -- pkg pkg -p macarm --nosign --nonotarize
+      - name: Upload macOS artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: naps2-mac-arm64-pkg
+          path: NAPS2.Setup/publish/**/*.pkg
           if-no-files-found: error
