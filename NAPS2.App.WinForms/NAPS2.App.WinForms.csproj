@@ -26,6 +26,7 @@
   <ItemGroup>
     <PackageReference Include="NAPS2.Pdfium.Binaries" Version="1.2.0" />
     <PackageReference Include="NAPS2.Tesseract.Binaries" Version="1.4.0" />
+    <PackageReference Include="Microsoft.ML.OnnxRuntime.DirectML" Version="1.24.3" />
 
     <ProjectReference Include="..\NAPS2.Lib.WinForms\NAPS2.Lib.WinForms.csproj" />
   </ItemGroup>

@@ -42,6 +42,7 @@
   <OcrEnginePath></OcrEnginePath>
   <OcrEngineArgs></OcrEngineArgs>
   <RapidOcrModelPath></RapidOcrModelPath>
+  <RapidOcrGpuBackend>auto</RapidOcrGpuBackend>
   <ForcePdfCompat>Default</ForcePdfCompat>
   <EsclSecurityPolicy>None</EsclSecurityPolicy>
   <EsclServerCertificatePath></EsclServerCertificatePath>

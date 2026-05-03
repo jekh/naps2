@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using System.Diagnostics;
 using System.Threading;
 using Microsoft.Extensions.Logging;
 using Microsoft.ML.OnnxRuntime;
@@ -11,14 +12,15 @@ namespace NAPS2.Ocr;
 public class RapidOcrEngine : IOcrEngine, IDisposable
 {
     private readonly string? _modelPath;
-    private readonly SessionOptions? _sessionOptions;
+    private readonly string _gpuBackend;
     private RapidOcr? _engine;
     private readonly object _initLock = new();
+    private string? _activeProvider;
 
-    public RapidOcrEngine(string? modelPath = null, SessionOptions? sessionOptions = null)
+    public RapidOcrEngine(string? modelPath = null, string gpuBackend = "auto")
     {
         _modelPath = modelPath;
-        _sessionOptions = sessionOptions;
+        _gpuBackend = gpuBackend.ToLowerInvariant();
     }
 
     public event EventHandler<OcrErrorEventArgs>? OcrError;
@@ -33,7 +35,17 @@ public class RapidOcrEngine : IOcrEngine, IDisposable
         var logger = scanningContext.Logger;
         try
         {
-            EnsureInitialized();
+            var initSw = Stopwatch.StartNew();
+            EnsureInitialized(logger);
+            initSw.Stop();
+
+            if (_activeProvider != null)
+            {
+                logger.LogDebug(
+                    "RapidOCR engine ready ({ElapsedMs}ms). Provider: {Provider}. Models: {ModelPath}",
+                    initSw.ElapsedMilliseconds, _activeProvider, _modelPath ?? "(bundled)");
+                _activeProvider = null;
+            }
 
             if (ocrParams.Mode.HasFlag(OcrMode.WithPreProcess))
             {
@@ -52,6 +64,15 @@ public class RapidOcrEngine : IOcrEngine, IDisposable
             var rapidResult = await Task.Run(
                 () => _engine!.Detect(bitmap, RapidOcrOptions.Default),
                 cancelToken);
+
+            if (rapidResult != null)
+            {
+                logger.LogDebug(
+                    "RapidOCR completed: {TextBlocks} text blocks, detect={DetectMs:F0}ms, total={TotalMs:F0}ms",
+                    rapidResult.TextBlocks?.Length ?? 0,
+                    rapidResult.DetectTime,
+                    rapidResult.DbNetTime + (rapidResult.TextBlocks?.Sum(b => b.BlockTime) ?? 0));
+            }
 
             if (rapidResult?.TextBlocks == null || rapidResult.TextBlocks.Length == 0)
             {
@@ -76,32 +97,103 @@ public class RapidOcrEngine : IOcrEngine, IDisposable
         }
     }
 
-    private void EnsureInitialized()
+    internal static SessionOptions CreateSessionOptions(string gpuBackend, ILogger? logger = null)
+    {
+        var sessionOptions = new SessionOptions();
+        sessionOptions.GraphOptimizationLevel = GraphOptimizationLevel.ORT_ENABLE_EXTENDED;
+
+        string[] available;
+        try
+        {
+            available = OrtEnv.Instance().GetAvailableProviders();
+            logger?.LogDebug("ONNX Runtime available providers: {Providers}", string.Join(", ", available));
+        }
+        catch (Exception e)
+        {
+            logger?.LogWarning(e, "Failed to query available ONNX Runtime providers, falling back to CPU");
+            return sessionOptions;
+        }
+
+        var requested = gpuBackend;
+        if (requested == "auto")
+        {
+            if (OperatingSystem.IsWindows() && available.Contains("DmlExecutionProvider"))
+                requested = "directml";
+            else if (available.Contains("CoreMLExecutionProvider"))
+                requested = "coreml";
+            else if (available.Contains("CUDAExecutionProvider"))
+                requested = "cuda";
+            else if (available.Contains("ROCmExecutionProvider"))
+                requested = "rocm";
+            else if (available.Contains("OpenVINOExecutionProvider"))
+                requested = "openvino";
+            else
+                requested = "cpu";
+        }
+
+        try
+        {
+            switch (requested)
+            {
+                case "directml":
+                    sessionOptions.AppendExecutionProvider_DML(0);
+                    logger?.LogInformation("RapidOCR using DirectML GPU acceleration");
+                    break;
+                case "coreml":
+                    sessionOptions.AppendExecutionProvider_CoreML(
+                        CoreMLFlags.COREML_FLAG_ENABLE_ON_SUBGRAPH);
+                    logger?.LogInformation("RapidOCR using CoreML GPU acceleration");
+                    break;
+                case "cuda":
+                    sessionOptions.AppendExecutionProvider_CUDA(0);
+                    logger?.LogInformation("RapidOCR using CUDA GPU acceleration");
+                    break;
+                case "rocm":
+                    sessionOptions.AppendExecutionProvider_ROCm(0);
+                    logger?.LogInformation("RapidOCR using ROCm GPU acceleration");
+                    break;
+                case "openvino":
+                    sessionOptions.AppendExecutionProvider_OpenVINO("GPU");
+                    logger?.LogInformation("RapidOCR using OpenVINO GPU acceleration");
+                    break;
+                default:
+                    logger?.LogInformation("RapidOCR using CPU execution provider");
+                    break;
+            }
+        }
+        catch (Exception e)
+        {
+            logger?.LogWarning(e, "{Provider} not available, falling back to CPU", requested);
+        }
+
+        sessionOptions.AppendExecutionProvider_CPU();
+        return sessionOptions;
+    }
+
+    private void EnsureInitialized(ILogger logger)
     {
         if (_engine != null) return;
         lock (_initLock)
         {
             if (_engine != null) return;
+
+            var sessionOptions = CreateSessionOptions(_gpuBackend, logger);
             _engine = new RapidOcr();
+
             if (_modelPath != null)
             {
                 var detPath = Path.Combine(_modelPath, RapidOcr.DefaultDetModelPath);
                 var clsPath = Path.Combine(_modelPath, RapidOcr.DefaultClsModelPath);
                 var recPath = Path.Combine(_modelPath, RapidOcr.DefaultRecModelPath);
                 var keysPath = Path.Combine(_modelPath, RapidOcr.DefaultKeysFilePath);
-                if (_sessionOptions != null)
-                    _engine.InitModels(detPath, clsPath, recPath, keysPath, _sessionOptions);
-                else
-                    _engine.InitModels(detPath, clsPath, recPath, keysPath);
-            }
-            else if (_sessionOptions != null)
-            {
-                _engine.InitModels(_sessionOptions);
+                _engine.InitModels(detPath, clsPath, recPath, keysPath, sessionOptions);
             }
             else
             {
-                _engine.InitModels();
+                _engine.InitModels(sessionOptions);
             }
+
+            _activeProvider = _gpuBackend;
         }
     }
 

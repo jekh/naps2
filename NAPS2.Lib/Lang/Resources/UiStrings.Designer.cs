@@ -1455,6 +1455,87 @@ namespace NAPS2.Lang.Resources {
         }
         
         /// <summary>
+        ///   Looks up a localized string similar to OCR engine:.
+        /// </summary>
+        internal static string OcrEngineLabel {
+            get {
+                return ResourceManager.GetString("OcrEngineLabel", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   Looks up a localized string similar to GPU acceleration:.
+        /// </summary>
+        internal static string OcrGpuLabel {
+            get {
+                return ResourceManager.GetString("OcrGpuLabel", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   Looks up a localized string similar to Auto (use GPU if available).
+        /// </summary>
+        internal static string OcrGpuAuto {
+            get {
+                return ResourceManager.GetString("OcrGpuAuto", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   Looks up a localized string similar to CPU only.
+        /// </summary>
+        internal static string OcrGpuCpu {
+            get {
+                return ResourceManager.GetString("OcrGpuCpu", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   Looks up a localized string similar to DirectML (Windows, any GPU).
+        /// </summary>
+        internal static string OcrGpuDirectML {
+            get {
+                return ResourceManager.GetString("OcrGpuDirectML", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   Looks up a localized string similar to CUDA (NVIDIA GPU).
+        /// </summary>
+        internal static string OcrGpuCuda {
+            get {
+                return ResourceManager.GetString("OcrGpuCuda", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   Looks up a localized string similar to CoreML (Apple Silicon).
+        /// </summary>
+        internal static string OcrGpuCoreML {
+            get {
+                return ResourceManager.GetString("OcrGpuCoreML", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   Looks up a localized string similar to ROCm (AMD GPU).
+        /// </summary>
+        internal static string OcrGpuROCm {
+            get {
+                return ResourceManager.GetString("OcrGpuROCm", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   Looks up a localized string similar to OpenVINO (Intel GPU).
+        /// </summary>
+        internal static string OcrGpuOpenVINO {
+            get {
+                return ResourceManager.GetString("OcrGpuOpenVINO", resourceCulture);
+            }
+        }
+
+        /// <summary>
         ///   Looks up a localized string similar to OCR language:.
         /// </summary>
         internal static string OcrLanguageLabel {

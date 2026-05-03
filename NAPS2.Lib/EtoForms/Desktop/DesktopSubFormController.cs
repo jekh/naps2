@@ -1,3 +1,4 @@
+using NAPS2.Config;
 using NAPS2.EtoForms.Ui;
 using NAPS2.Ocr;
 
@@ -9,14 +10,17 @@ public class DesktopSubFormController : IDesktopSubFormController
     private readonly UiImageList _imageList;
     private readonly DesktopImagesController _desktopImagesController;
     private readonly TesseractLanguageManager _tesseractLanguageManager;
+    private readonly Naps2Config _config;
 
     public DesktopSubFormController(IFormFactory formFactory, UiImageList imageList,
-        DesktopImagesController desktopImagesController, TesseractLanguageManager tesseractLanguageManager)
+        DesktopImagesController desktopImagesController, TesseractLanguageManager tesseractLanguageManager,
+        Naps2Config config)
     {
         _formFactory = formFactory;
         _imageList = imageList;
         _desktopImagesController = desktopImagesController;
         _tesseractLanguageManager = tesseractLanguageManager;
+        _config = config;
     }
 
     private Func<ListSelection<UiImage>>? SelectionFunc { get; init; }
@@ -26,7 +30,7 @@ public class DesktopSubFormController : IDesktopSubFormController
     public IDesktopSubFormController WithSelection(Func<ListSelection<UiImage>> selectionFunc)
     {
         return new DesktopSubFormController(_formFactory, _imageList, _desktopImagesController,
-            _tesseractLanguageManager)
+            _tesseractLanguageManager, _config)
         {
             SelectionFunc = selectionFunc
         };
@@ -67,7 +71,8 @@ public class DesktopSubFormController : IDesktopSubFormController
 
     public void ShowOcrForm()
     {
-        if (_tesseractLanguageManager.InstalledLanguages.Any())
+        var engineType = _config.Get(c => c.OcrEngineType);
+        if (engineType == "RapidOCR" || _tesseractLanguageManager.InstalledLanguages.Any())
         {
             _formFactory.Create<OcrSetupForm>().ShowModal();
         }

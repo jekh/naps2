@@ -480,6 +480,33 @@
   <data name="MakePdfsSearchable" xml:space="preserve">
     <value>Make PDFs searchable using OCR</value>
   </data>
+  <data name="OcrEngineLabel" xml:space="preserve">
+    <value>OCR engine:</value>
+  </data>
+  <data name="OcrGpuLabel" xml:space="preserve">
+    <value>GPU acceleration:</value>
+  </data>
+  <data name="OcrGpuAuto" xml:space="preserve">
+    <value>Auto (use GPU if available)</value>
+  </data>
+  <data name="OcrGpuCpu" xml:space="preserve">
+    <value>CPU only</value>
+  </data>
+  <data name="OcrGpuDirectML" xml:space="preserve">
+    <value>DirectML (Windows, any GPU)</value>
+  </data>
+  <data name="OcrGpuCuda" xml:space="preserve">
+    <value>CUDA (NVIDIA GPU)</value>
+  </data>
+  <data name="OcrGpuCoreML" xml:space="preserve">
+    <value>CoreML (Apple Silicon)</value>
+  </data>
+  <data name="OcrGpuROCm" xml:space="preserve">
+    <value>ROCm (AMD GPU)</value>
+  </data>
+  <data name="OcrGpuOpenVINO" xml:space="preserve">
+    <value>OpenVINO (Intel GPU)</value>
+  </data>
   <data name="OcrLanguageLabel" xml:space="preserve">
     <value>OCR language:</value>
   </data>

@@ -13,9 +13,11 @@ public class OcrSetupForm : EtoDialogBase
     private readonly TesseractLanguageManager _tesseractLanguageManager;
 
     private readonly CheckBox _enableOcr = C.CheckBox(UiStrings.MakePdfsSearchable);
+    private readonly DropDown _engineType = C.DropDown();
     private readonly DropDown _ocrLang = C.DropDown();
     private readonly EnumDropDownWidget<LocalizedOcrMode> _ocrMode = new()
         { Items = [LocalizedOcrMode.Fast, LocalizedOcrMode.Best] };
+    private readonly DropDown _gpuBackend = C.DropDown();
     private readonly CheckBox _ocrPreProcessing = C.CheckBox(UiStrings.OcrPreProcessing);
     private readonly CheckBox _ocrAfterScanning = C.CheckBox(
         TranslationMigrator.PickTranslated(
@@ -23,6 +25,9 @@ public class OcrSetupForm : EtoDialogBase
             "RunOcrAfterScanning",
             "PreemptivelyOcrAfterScanning"));
     private readonly LinkButton _moreLanguages = C.Link(UiStrings.GetMoreLanguages);
+
+    private readonly LayoutVisibility _tesseractVis = new(true);
+    private readonly LayoutVisibility _rapidOcrVis = new(false);
 
     private string? _code;
     private string? _multiLangCode;
@@ -36,13 +41,33 @@ public class OcrSetupForm : EtoDialogBase
 
         _tesseractLanguageManager = tesseractLanguageManager;
 
+        _engineType.Items.Add(new ListItem { Key = "Tesseract", Text = "Tesseract" });
+        _engineType.Items.Add(new ListItem { Key = "RapidOCR", Text = "RapidOCR (PaddleOCR)" });
+        _engineType.SelectedKey = Config.Get(c => c.OcrEngineType);
+        if (_engineType.SelectedIndex == -1)
+            _engineType.SelectedIndex = 0;
+        _engineType.SelectedIndexChanged += EngineType_SelectedIndexChanged;
+
+        _gpuBackend.Items.Add(new ListItem { Key = "auto", Text = UiStrings.OcrGpuAuto });
+        _gpuBackend.Items.Add(new ListItem { Key = "cpu", Text = UiStrings.OcrGpuCpu });
+        if (OperatingSystem.IsWindows())
+            _gpuBackend.Items.Add(new ListItem { Key = "directml", Text = UiStrings.OcrGpuDirectML });
+        if (OperatingSystem.IsMacOS())
+            _gpuBackend.Items.Add(new ListItem { Key = "coreml", Text = UiStrings.OcrGpuCoreML });
+        _gpuBackend.Items.Add(new ListItem { Key = "cuda", Text = UiStrings.OcrGpuCuda });
+        if (OperatingSystem.IsLinux())
+            _gpuBackend.Items.Add(new ListItem { Key = "rocm", Text = UiStrings.OcrGpuROCm });
+        _gpuBackend.Items.Add(new ListItem { Key = "openvino", Text = UiStrings.OcrGpuOpenVINO });
+        _gpuBackend.SelectedKey = Config.Get(c => c.RapidOcrGpuBackend);
+        if (_gpuBackend.SelectedIndex == -1)
+            _gpuBackend.SelectedIndex = 0;
+
         _enableOcr.CheckedChanged += EnableOcr_CheckedChanged;
         _moreLanguages.Click += MoreLanguages_Click;
 
         var configOcrMode = Config.Get(c => c.OcrMode);
         if (configOcrMode == LocalizedOcrMode.Legacy)
         {
-            // Legacy is no longer supported
             configOcrMode = LocalizedOcrMode.Fast;
         }
 
@@ -66,22 +91,29 @@ public class OcrSetupForm : EtoDialogBase
         LayoutController.Content = L.Column(
             _enableOcr,
             L.Row(
+                C.Label(UiStrings.OcrEngineLabel).AlignCenter().Padding(right: 40),
+                _engineType.Scale()
+            ).Aligned(),
+            L.Row(
                 C.Label(UiStrings.OcrLanguageLabel).AlignCenter().Padding(right: 40),
                 _ocrLang.Scale()
             ).Aligned(),
             L.Row(
                 C.Label(UiStrings.OcrModeLabel).AlignCenter().Padding(right: 40),
                 _ocrMode.AsControl().Scale()
-            ).Aligned(),
+            ).Aligned().Visible(_tesseractVis),
+            L.Row(
+                C.Label(UiStrings.OcrGpuLabel).AlignCenter().Padding(right: 40),
+                _gpuBackend.Scale()
+            ).Aligned().Visible(_rapidOcrVis),
             _ocrPreProcessing,
             _ocrAfterScanning,
             C.Filler(),
             L.Row(
-                _moreLanguages.AlignCenter().Padding(right: 30),
+                _moreLanguages.AlignCenter().Padding(right: 30).Visible(_tesseractVis),
                 C.Filler(),
                 L.OkCancel(
                     C.OkButton(this, Save),
-                    // TODO: Should we allow Esc to close the window if there are unsaved changes?
                     C.CancelButton(this))
             )
         );
@@ -90,6 +122,29 @@ public class OcrSetupForm : EtoDialogBase
     private void LoadLanguages()
     {
         _suppressLangChangeEvent = true;
+
+        if (_engineType.SelectedKey == "RapidOCR")
+        {
+            LoadRapidOcrLanguages();
+        }
+        else
+        {
+            LoadTesseractLanguages();
+        }
+
+        if (!string.IsNullOrEmpty(_code))
+        {
+            _ocrLang.SelectedKey = _code;
+        }
+        if (_ocrLang.SelectedIndex == -1)
+        {
+            _ocrLang.SelectedIndex = 0;
+        }
+        _suppressLangChangeEvent = false;
+    }
+
+    private void LoadTesseractLanguages()
+    {
         var languages = _tesseractLanguageManager.InstalledLanguages
             .OrderBy(x => x.Name)
             .ToList();
@@ -117,23 +172,31 @@ public class OcrSetupForm : EtoDialogBase
                 Text = UiStrings.MultipleLanguages
             });
         }
-        if (!string.IsNullOrEmpty(_code))
+    }
+
+    private void LoadRapidOcrLanguages()
+    {
+        _ocrLang.Items.Clear();
+        _ocrLang.Items.Add(new ListItem
         {
-            _ocrLang.SelectedKey = _code;
-        }
-        if (_ocrLang.SelectedIndex == -1)
-        {
-            _ocrLang.SelectedIndex = 0;
-        }
-        _suppressLangChangeEvent = false;
+            Key = "latin",
+            Text = "Latin (English, French, German, Spanish, ...)"
+        });
     }
 
     private void UpdateView()
     {
         bool isEnabled = _enableOcr.IsChecked();
+        bool isTesseract = _engineType.SelectedKey != "RapidOCR";
+
+        _tesseractVis.IsVisible = isTesseract;
+        _rapidOcrVis.IsVisible = !isTesseract;
+
         _enableOcr.Enabled = !Config.AppLocked.Has(c => c.EnableOcr);
+        _engineType.Enabled = isEnabled;
         _ocrLang.Enabled = isEnabled && !Config.AppLocked.Has(c => c.OcrLanguageCode);
         _ocrMode.Enabled = isEnabled && !Config.AppLocked.Has(c => c.OcrMode);
+        _gpuBackend.Enabled = isEnabled;
         _ocrPreProcessing.Enabled = isEnabled && !Config.AppLocked.Has(c => c.OcrPreProcessing);
         _ocrAfterScanning.Enabled = isEnabled && !Config.AppLocked.Has(c => c.OcrAfterScanning);
         _moreLanguages.Enabled = !Config.AppLocked.Has(c => c.OcrLanguageCode);
@@ -141,6 +204,13 @@ public class OcrSetupForm : EtoDialogBase
 
     private void EnableOcr_CheckedChanged(object? sender, EventArgs e)
     {
+        UpdateView();
+    }
+
+    private void EngineType_SelectedIndexChanged(object? sender, EventArgs e)
+    {
+        _code = null;
+        LoadLanguages();
         UpdateView();
     }
 
@@ -153,7 +223,8 @@ public class OcrSetupForm : EtoDialogBase
     private void OcrLang_SelectedIndexChanged(object? sender, EventArgs e)
     {
         if (_suppressLangChangeEvent) return;
-        if (_ocrLang.SelectedIndex == _ocrLang.Items.Count - 1)
+        if (_engineType.SelectedKey != "RapidOCR" &&
+            _ocrLang.SelectedIndex == _ocrLang.Items.Count - 1)
         {
             var multiLangForm = FormFactory.Create<OcrMultiLangForm>();
             multiLangForm.ShowModal();
@@ -176,6 +247,8 @@ public class OcrSetupForm : EtoDialogBase
         {
             var transact = Config.User.BeginTransaction();
             transact.Set(c => c.EnableOcr, _enableOcr.IsChecked());
+            transact.Set(c => c.OcrEngineType, _engineType.SelectedKey ?? "Tesseract");
+            transact.Set(c => c.RapidOcrGpuBackend, _gpuBackend.SelectedKey ?? "auto");
             transact.Set(c => c.OcrLanguageCode, _ocrLang.SelectedKey);
             if (_multiLangCode?.Contains("+") == true)
             {

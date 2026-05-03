@@ -159,6 +159,9 @@ public class CommonConfig
     [Common]
     public string? RapidOcrModelPath { get; set; }
 
+    [Common]
+    public string RapidOcrGpuBackend { get; set; } = "auto";
+
     [User]
     public string? LastImageExt { get; set; }
 

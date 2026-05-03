@@ -139,8 +139,10 @@ public class CommonModule : Module
             if (engineType == "RapidOCR")
             {
                 var modelPath = config.Get(c => c.RapidOcrModelPath);
+                var gpuBackend = config.Get(c => c.RapidOcrGpuBackend);
                 var rapidEngine = new RapidOcrEngine(
-                    string.IsNullOrWhiteSpace(modelPath) ? null : modelPath);
+                    string.IsNullOrWhiteSpace(modelPath) ? null : modelPath,
+                    string.IsNullOrWhiteSpace(gpuBackend) ? "auto" : gpuBackend);
                 rapidEngine.OcrError += (_, args) => errorOutput.DisplayError(SdkResources.OcrError, args.Exception);
                 rapidEngine.OcrTimeout += (_, _) => errorOutput.DisplayError(SdkResources.OcrTimeout);
                 return rapidEngine;
