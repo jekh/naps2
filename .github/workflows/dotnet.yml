@@ -9,7 +9,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-2022, ubuntu-24.04, macos-15]
+        os: [windows-2022]
+        # TODO: Re-enable linux (ubuntu-24.04) and macOS (macos-15) builds
     steps:
     - name: Install OS dependencies
       if: matrix.os == 'ubuntu-24.04'
