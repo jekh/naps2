@@ -136,6 +136,16 @@ public class CommonModule : Module
                 return extEngine;
             }
 
+            if (engineType == "RapidOCR")
+            {
+                var modelPath = config.Get(c => c.RapidOcrModelPath);
+                var rapidEngine = new RapidOcrEngine(
+                    string.IsNullOrWhiteSpace(modelPath) ? null : modelPath);
+                rapidEngine.OcrError += (_, args) => errorOutput.DisplayError(SdkResources.OcrError, args.Exception);
+                rapidEngine.OcrTimeout += (_, _) => errorOutput.DisplayError(SdkResources.OcrTimeout);
+                return rapidEngine;
+            }
+
             var tessEngine = TesseractOcrEngine.BundledWithModes(ctx.Resolve<TesseractLanguageManager>().TessdataBasePath);
             tessEngine.OcrError += (_, args) => errorOutput.DisplayError(SdkResources.OcrError, args.Exception);
             tessEngine.OcrTimeout += (_, _) => errorOutput.DisplayError(SdkResources.OcrTimeout);

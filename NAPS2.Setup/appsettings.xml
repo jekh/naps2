@@ -41,6 +41,7 @@
   <OcrEngineType mode="default">Tesseract</OcrEngineType>
   <OcrEnginePath></OcrEnginePath>
   <OcrEngineArgs></OcrEngineArgs>
+  <RapidOcrModelPath></RapidOcrModelPath>
   <ForcePdfCompat>Default</ForcePdfCompat>
   <EsclSecurityPolicy>None</EsclSecurityPolicy>
   <EsclServerCertificatePath></EsclServerCertificatePath>

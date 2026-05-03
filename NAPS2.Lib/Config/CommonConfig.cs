@@ -156,6 +156,9 @@ public class CommonConfig
     [Common]
     public string? OcrEngineArgs { get; set; }
 
+    [Common]
+    public string? RapidOcrModelPath { get; set; }
+
     [User]
     public string? LastImageExt { get; set; }
 
