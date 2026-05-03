@@ -38,6 +38,9 @@
   <OcrDefaultLanguage></OcrDefaultLanguage>
   <OcrDefaultMode>Fast</OcrDefaultMode>
   <OcrDefaultAfterScanning>true</OcrDefaultAfterScanning>
+  <OcrEngineType mode="default">Tesseract</OcrEngineType>
+  <OcrEnginePath></OcrEnginePath>
+  <OcrEngineArgs></OcrEngineArgs>
   <ForcePdfCompat>Default</ForcePdfCompat>
   <EsclSecurityPolicy>None</EsclSecurityPolicy>
   <EsclServerCertificatePath></EsclServerCertificatePath>

@@ -147,6 +147,15 @@ public class CommonConfig
     [Common]
     public bool OcrAfterScanning { get; set; }
 
+    [Common]
+    public string OcrEngineType { get; set; } = "Tesseract";
+
+    [Common]
+    public string? OcrEnginePath { get; set; }
+
+    [Common]
+    public string? OcrEngineArgs { get; set; }
+
     [User]
     public string? LastImageExt { get; set; }
 

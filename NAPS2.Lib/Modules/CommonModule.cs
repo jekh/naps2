@@ -118,11 +118,28 @@ public class CommonModule : Module
         }).SingleInstance();
         builder.Register<IOcrEngine>(ctx =>
         {
-            var engine = TesseractOcrEngine.BundledWithModes(ctx.Resolve<TesseractLanguageManager>().TessdataBasePath);
+            var config = ctx.Resolve<Naps2Config>();
+            var engineType = config.Get(c => c.OcrEngineType);
             var errorOutput = ctx.Resolve<ErrorOutput>();
-            engine.OcrError += (_, args) => errorOutput.DisplayError(SdkResources.OcrError, args.Exception);
-            engine.OcrTimeout += (_, _) => errorOutput.DisplayError(SdkResources.OcrTimeout);
-            return engine;
+
+            if (engineType == "External")
+            {
+                var path = config.Get(c => c.OcrEnginePath);
+                if (string.IsNullOrWhiteSpace(path))
+                {
+                    throw new InvalidOperationException(
+                        "OcrEngineType is 'External' but OcrEnginePath is not set.");
+                }
+                var extEngine = new ExternalOcrEngine(path, config.Get(c => c.OcrEngineArgs));
+                extEngine.OcrError += (_, args) => errorOutput.DisplayError(SdkResources.OcrError, args.Exception);
+                extEngine.OcrTimeout += (_, _) => errorOutput.DisplayError(SdkResources.OcrTimeout);
+                return extEngine;
+            }
+
+            var tessEngine = TesseractOcrEngine.BundledWithModes(ctx.Resolve<TesseractLanguageManager>().TessdataBasePath);
+            tessEngine.OcrError += (_, args) => errorOutput.DisplayError(SdkResources.OcrError, args.Exception);
+            tessEngine.OcrTimeout += (_, _) => errorOutput.DisplayError(SdkResources.OcrTimeout);
+            return tessEngine;
         }).SingleInstance();
     }
 }
