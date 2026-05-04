@@ -24,6 +24,7 @@ internal class AutomatedScanning
     private readonly FileImporter _fileImporter;
     private readonly IOperationFactory _operationFactory;
     private readonly TesseractLanguageManager _tesseractLanguageManager;
+    private readonly OcrEngineFactory _ocrEngineFactory;
     private readonly IFormFactory _formFactory;
     private readonly Naps2Config _config;
     private readonly IProfileManager _profileManager;
@@ -46,7 +47,8 @@ internal class AutomatedScanning
     public AutomatedScanning(ConsoleOutput output, AutomatedScanningOptions options, ImageContext imageContext,
         IScanPerformer scanPerformer, ErrorOutput errorOutput, IEmailProviderFactory emailProviderFactory,
         FileImporter fileImporter, IOperationFactory operationFactory,
-        TesseractLanguageManager tesseractLanguageManager, IFormFactory formFactory, Naps2Config config,
+        TesseractLanguageManager tesseractLanguageManager, OcrEngineFactory ocrEngineFactory,
+        IFormFactory formFactory, Naps2Config config,
         IProfileManager profileManager, RecoveryStorageManager recoveryStorageManager, ScanningContext scanningContext,
         IScanBridgeFactory scanBridgeFactory)
     {
@@ -59,6 +61,7 @@ internal class AutomatedScanning
         _fileImporter = fileImporter;
         _operationFactory = operationFactory;
         _tesseractLanguageManager = tesseractLanguageManager;
+        _ocrEngineFactory = ocrEngineFactory;
         _formFactory = formFactory;
         _config = config;
         _profileManager = profileManager;
@@ -189,7 +192,6 @@ internal class AutomatedScanning
     {
         if (_options.NoProfile)
         {
-            // Don't use OCR-enabled settings from the GUI if --noprofile is set
             _config.Run.Set(c => c.EnableOcr, false);
         }
         bool canUseOcr = IsPdfFile(_options.OutputPath) || IsPdfFile(_options.EmailFileName);
@@ -201,13 +203,28 @@ internal class AutomatedScanning
         {
             _config.Run.Set(c => c.EnableOcr, false);
         }
-        else if (_options.EnableOcr || !string.IsNullOrEmpty(_options.OcrLang))
+        else if (_options.EnableOcr || !string.IsNullOrEmpty(_options.OcrLang) ||
+                 !string.IsNullOrEmpty(_options.OcrEngine))
         {
             _config.Run.Set(c => c.EnableOcr, true);
         }
         if (!string.IsNullOrEmpty(_options.OcrLang))
         {
             _config.Run.Set(c => c.OcrLanguageCode, _options.OcrLang);
+        }
+        if (!string.IsNullOrEmpty(_options.OcrEngine))
+        {
+            var engineType = _options.OcrEngine!.ToLowerInvariant() switch
+            {
+                "rapidocr" or "rapid" or "paddle" => "RapidOCR",
+                "tesseract" or "tess" => "Tesseract",
+                "external" => "External",
+                _ => _options.OcrEngine
+            };
+            _config.Run.Set(c => c.OcrEngineType, engineType);
+            var oldEngine = _scanningContext.OcrEngine;
+            _scanningContext.OcrEngine = _ocrEngineFactory.Create();
+            (oldEngine as IDisposable)?.Dispose();
         }
         _ocrParams = _config.DefaultOcrParams();
     }
@@ -527,6 +544,17 @@ internal class AutomatedScanning
                 Height = pageSize.Height,
                 Unit = (LocalizedPageSizeUnit) pageSize.Unit
             };
+        }
+
+        if (_options.OcrEngine != null)
+        {
+            var valid = new[] { "tesseract", "tess", "rapidocr", "rapid", "paddle", "external" };
+            if (!valid.Contains(_options.OcrEngine.ToLowerInvariant()))
+            {
+                _errorOutput.DisplayError(
+                    $"Invalid OCR engine '{_options.OcrEngine}'. Valid options: tesseract, rapidocr, external");
+                return false;
+            }
         }
 
         if (new[] { _options.Interleave, _options.Deinterleave, _options.AltInterleave, _options.AltDeinterleave }

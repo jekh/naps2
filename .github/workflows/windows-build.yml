@@ -208,7 +208,11 @@ jobs:
         run: |
           VERSION=$(grep '<Version>' NAPS2.Setup/targets/VersionTargets.targets | sed 's/.*<Version>\(.*\)<\/Version>/\1/')
           PUBLISH_DIR=NAPS2.App.Gtk/bin/Release/net9/linux-x64/publish
-          tar -czf "naps2-${VERSION}-linux-x64.tar.gz" -C "$PUBLISH_DIR" --exclude='*.pdb' .
+          tar -czf "naps2-${VERSION}-linux-x64.tar.gz" -C "$PUBLISH_DIR" \
+            --exclude='*.pdb' --exclude='*.a' \
+            --exclude='apphost' --exclude='sosdocsunix.txt' \
+            --exclude='libdbgshim.so' --exclude='libsos.so' --exclude='libsosplugin.so' \
+            .
       - name: Upload tarball artifact
         uses: actions/upload-artifact@v4
         with:

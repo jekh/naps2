@@ -184,6 +184,9 @@ public class AutomatedScanningOptions
                                   " English, 'fra' for French, etc.). Implies --enableocr.")]
     public string? OcrLang { get; set; }
 
+    [Option("ocrengine", HelpText = "The OCR engine to use (tesseract/rapidocr). Implies --enableocr.")]
+    public string? OcrEngine { get; set; }
+
     #endregion
 
     #region Email Options
